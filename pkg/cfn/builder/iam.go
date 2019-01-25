@@ -3,6 +3,7 @@ package builder
 import (
 	gfn "github.com/awslabs/goformation/cloudformation"
 
+	api "github.com/weaveworks/eksctl/pkg/apis/eksctl.io/v1alpha4"
 	"github.com/weaveworks/eksctl/pkg/cfn/outputs"
 )
 
@@ -102,10 +103,24 @@ func (n *NodeGroupResourceSet) WithNamedIAM() bool {
 }
 
 func (n *NodeGroupResourceSet) addResourcesForIAM() {
-	if n.spec.IAM.InstanceRoleARN != "" {
+	if n.spec.IAM == nil {
+		n.spec.IAM = &api.NodeGroupIAM{}
+	}
+
+	if n.spec.IAM.InstanceProfileARN != "" {
 		n.rs.withIAM = false
 		n.rs.withNamedIAM = false
 
+		n.instanceProfile = gfn.NewString(n.spec.IAM.InstanceProfileARN)
+		// TODO need to figure out how to get the role if we are given a profile,
+		// as we need to allow the nodegroup to join the cluster
+		//n.rs.defineOutputWithoutCollector(outputs.NodeGroupInstanceRoleARN, n.spec.IAM.InstanceRoleARN, true)
+		return
+	}
+
+	n.rs.withIAM = true
+
+	if n.spec.IAM.InstanceRoleARN != "" {
 		n.instanceProfile = n.newResource("NodeInstanceProfile", &gfn.AWSIAMInstanceProfile{
 			Path:  gfn.NewString("/"),
 			Roles: makeStringSlice(n.spec.IAM.InstanceRoleARN),
@@ -114,9 +129,7 @@ func (n *NodeGroupResourceSet) addResourcesForIAM() {
 		return
 	}
 
-	n.rs.withIAM = true
-
-	if n.spec.IAM.InstanceRoleName != "" {
+	if n.spec.IAM.InstanceRoleName == "" {
 		n.rs.withNamedIAM = true
 	}
 
